@@ -67,10 +67,16 @@ export type AgentRuntimeState = {
 	contextTokens?: number | null;
 	contextWindow?: number | null;
 	contextPercent?: number | null;
+	tokensInput?: number;
+	tokensOutput?: number;
 	cacheRead?: number;
 	cacheWrite?: number;
 	cacheTotal?: number;
 	cost?: number;
+	/** Cache hit rate percentage (0–100), same as pi CLI extension's Hxx% */
+	cacheHitRate?: number;
+	/** Cost in RMB (¥), using DeepSeek pricing or USD→CNY conversion */
+	costRmb?: number;
 };
 
 export type AvailableModel = {

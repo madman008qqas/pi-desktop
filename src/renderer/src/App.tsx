@@ -1617,33 +1617,56 @@ function SessionStatus(props: {
 	if (!props.state) return null;
 	return (
 		<div className="session-status">
-			<span className="model-chip">
-				{props.state.modelName ?? props.state.modelId ?? "model"}
-			</span>
-			<span>think: {props.state.thinkingLevel ?? "-"}</span>
 			{props.duration != null && (
 				<span title="本次会话耗时">⏱ {formatDuration(props.duration)}</span>
 			)}
-			{props.state.contextPercent != null && (
-				<span>
-					ctx:{" "}
-					{props.state.contextPercent?.toFixed?.(1) ??
-						props.state.contextPercent}
-					% / {formatCompact(props.state.contextWindow)}
+			{/* Cache hit rate — same format as pi CLI cache-hit-rate extension */}
+			{props.state.cacheHitRate != null && (
+				<span
+					title={`缓存命中率: ${props.state.cacheHitRate.toFixed(1)}%`}
+					className={
+						props.state.cacheHitRate >= 80
+							? "stat-success"
+							: props.state.cacheHitRate >= 50
+								? "stat-warning"
+								: "stat-error"
+					}
+				>
+					{props.state.cacheHitRate >= 99.5
+						? "H99%"
+						: props.state.cacheHitRate < 0.5
+							? "<1%"
+							: `H${props.state.cacheHitRate.toFixed(0)}%`}
 				</span>
 			)}
-			{props.state.cacheTotal != null && (
+			{/* Fallback: show raw cache tokens when no hit rate yet */}
+			{props.state.cacheHitRate == null && props.state.cacheTotal != null && props.state.cacheTotal > 0 && (
 				<span title={`读缓存: ${formatCompact(props.state.cacheRead ?? 0)} / 写缓存: ${formatCompact(props.state.cacheWrite ?? 0)}`}>
-					cache: ↑{formatCompact(props.state.cacheRead ?? 0)} /
-					↓{formatCompact(props.state.cacheWrite ?? 0)}
-					{props.state.cacheTotal > 0 && (
-						<> ({(props.state.cacheRead! / props.state.cacheTotal * 100).toFixed(1)}% hit)</>
-					)}
+					cache: ↑{formatCompact(props.state.cacheRead ?? 0)} / ↓{formatCompact(props.state.cacheWrite ?? 0)}
 				</span>
 			)}
-			{props.state.cost != null && (
-				<span title="本次会话累计费用">
-					cost: {props.state.cost < 0.001 ? `$${props.state.cost.toFixed(6)}` : `$${props.state.cost.toFixed(4)}`}
+			{/* Cost in RMB — same format as pi CLI extension */}
+			{props.state.costRmb != null && (
+				<span
+					title={`累计费用: ¥${props.state.costRmb.toFixed(4)}`}
+				>
+					{props.state.costRmb < 0.01
+						? `¥${props.state.costRmb.toFixed(4)}`
+						: props.state.costRmb < 1
+							? `¥${props.state.costRmb.toFixed(3)}`
+							: `¥${props.state.costRmb.toFixed(2)}`}
+				</span>
+			)}
+			{/* Fallback: show raw USD cost when costRmb not available */}
+			{props.state.costRmb == null && props.state.cost != null && (
+				<span title="本次会话累计费用（USD）">${props.state.cost.toFixed(3)}</span>
+			)}
+			{props.state.contextPercent != null && (
+				<span
+					title={`上下文: ${formatTokens(props.state.contextTokens ?? 0)} / ${formatCompact(props.state.contextWindow)}  (${props.state.contextPercent.toFixed(1)}%)`}
+				>
+					{formatTokens(props.state.contextTokens ?? 0)}/{formatCompact(props.state.contextWindow)}（{props.state.contextPercent?.toFixed?.(1) ??
+						props.state.contextPercent}%）
 				</span>
 			)}
 		</div>
@@ -1732,6 +1755,15 @@ function formatCompact(value?: number | null) {
 	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
 	if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
 	return String(value);
+}
+
+/** Match pi CLI's token formatting (used for ↑↓RW stats). */
+function formatTokens(count: number): string {
+	if (count < 1000) return String(count);
+	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
+	if (count < 1000000) return `${Math.round(count / 1000)}k`;
+	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
+	return `${Math.round(count / 1000000)}M`;
 }
 
 function BranchSelector(props: {

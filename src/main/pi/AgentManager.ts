@@ -341,6 +341,48 @@ export class AgentManager {
 		return this.getRuntimeState(agentId);
 	}
 
+	// ── DeepSeek pricing (元/百万tokens, from official page) ────────────
+	private static readonly DEEPSEEK_PRICING: Record<
+		string,
+		{ miss: number; hit: number; output: number }
+	> = {
+		"deepseek-v4-flash": { miss: 1.0, hit: 0.02, output: 2.0 },
+		"deepseek-v4-pro": { miss: 3.0, hit: 0.025, output: 6.0 },
+	};
+
+	private static detectDeepSeekPricing(
+		modelId: string,
+	): { miss: number; hit: number; output: number } | null {
+		const m = AgentManager.DEEPSEEK_PRICING[modelId];
+		if (m) return m;
+		if (
+			modelId.includes("deepseek-v4-flash") ||
+			modelId.includes("deepseek-chat")
+		) {
+			return AgentManager.DEEPSEEK_PRICING["deepseek-v4-flash"];
+		}
+		if (
+			modelId.includes("deepseek-v4-pro") ||
+			modelId.includes("deepseek-reasoner")
+		) {
+			return AgentManager.DEEPSEEK_PRICING["deepseek-v4-pro"];
+		}
+		return null;
+	}
+
+	private static calcDeepSeekCost(
+		pricing: { miss: number; hit: number; output: number },
+		input: number,
+		output: number,
+		cacheRead: number,
+	): number {
+		const nonCached = Math.max(0, input - cacheRead);
+		const inputCost =
+			(nonCached * pricing.miss + cacheRead * pricing.hit) / 1_000_000;
+		const outputCost = (output * pricing.output) / 1_000_000;
+		return inputCost + outputCost;
+	}
+
 	async getRuntimeState(agentId: string): Promise<AgentRuntimeState> {
 		const runtime = this.requireRuntime(agentId);
 		const [stateResponse, statsResponse] = await Promise.all([
@@ -355,20 +397,53 @@ export class AgentManager {
 		const stats = statsResponse.data as any;
 		const model = state?.model;
 		const tokens = stats?.tokens;
+		const input = tokens?.input ?? 0;
+		const output = tokens?.output ?? 0;
+		const cacheRead = tokens?.cacheRead ?? 0;
+
+		// ── Cache hit rate: cacheRead / (cacheRead + input) ──────────
+		let cacheHitRate: number | undefined;
+		const hitTotal = cacheRead + input;
+		if (hitTotal > 0) {
+			cacheHitRate = (cacheRead / hitTotal) * 100;
+		}
+
+		// ── Cost in RMB (¥) ─────────────────────────────────────────
+		let costRmb: number | undefined;
+		let costUsd = stats?.cost;
+		const modelId = model?.id ?? "";
+		const dsPricing = AgentManager.detectDeepSeekPricing(modelId);
+		if (dsPricing) {
+			costRmb = AgentManager.calcDeepSeekCost(
+				dsPricing,
+				input,
+				output,
+				cacheRead,
+			);
+		} else if (costUsd != null) {
+			// Non-DeepSeek: convert USD → RMB at ~7.2
+			costRmb = costUsd * 7.2;
+		}
+
 		return {
 			modelName: model?.name ?? model?.id,
 			provider: model?.provider,
-			modelId: model?.id,
+			modelId,
 			thinkingLevel: state?.thinkingLevel,
 			isStreaming: state?.isStreaming,
 			isCompacting: state?.isCompacting,
 			contextTokens: stats?.contextUsage?.tokens,
-			contextWindow: stats?.contextUsage?.contextWindow ?? model?.contextWindow,
+			contextWindow:
+				stats?.contextUsage?.contextWindow ?? model?.contextWindow,
 			contextPercent: stats?.contextUsage?.percent,
-			cacheRead: tokens?.cacheRead,
-			cacheWrite: tokens?.cacheWrite,
-			cacheTotal: (tokens?.cacheRead ?? 0) + (tokens?.cacheWrite ?? 0),
+			tokensInput: input,
+			tokensOutput: output,
+			cacheRead,
+			cacheWrite: tokens?.cacheWrite ?? 0,
+			cacheTotal: cacheRead + (tokens?.cacheWrite ?? 0),
 			cost: stats?.cost,
+			cacheHitRate,
+			costRmb,
 		};
 	}
 
