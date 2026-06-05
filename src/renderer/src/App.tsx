@@ -1644,7 +1644,7 @@ function SessionStatus(props: {
 			{/* Cache hit rate — same format as pi CLI extension */}
 			{cacheHitRate != null && (
 				<span
-					title={`缓存命中率: ${cacheHitRate.toFixed(1)}%`}
+					title={`命中率: ${cacheHitRate.toFixed(1)}% (缓存读取: ${(s.cacheRead ?? 0).toLocaleString()} tokens / 非缓存输入: ${(s.tokensInput ?? 0).toLocaleString()} tokens)`}
 					className={
 						cacheHitRate >= 80
 							? "stat-success"
