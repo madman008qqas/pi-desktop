@@ -648,6 +648,19 @@ export class AgentManager {
 			// 清理流式思考状态
 			this.streamingThinking.delete(agentId);
 			this.emitThinking(agentId, "");
+			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白
+			// 错误信息可能在顶层也可能嵌套在 messages 数组中——遍历查找最近一条异常消息
+			const errorList = Array.isArray(typed.messages)
+				? (typed.messages as any[]).filter((m: any) => m.stopReason === "error")
+				: [];
+			const errorMsg =
+				(typed.errorMessage as string | undefined) ??
+				errorList[errorList.length - 1]?.errorMessage;
+			if (errorMsg) {
+				this.addMessage(agentId, "error", String(errorMsg));
+			} else if (typed.stopReason === "error" || errorList.length > 0) {
+				this.addMessage(agentId, "error", "Agent 返回未知错误，请重试");
+			}
 			this.emitState();
 			// 同步刷新 runtimeState，将 isStreaming 重置为 false；
 			// 否则前端 isAgentBusy 依赖的 isStreaming 仍为过期的 true，导致排队 flush 无法触发。
