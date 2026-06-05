@@ -9,8 +9,6 @@
 ### 新增
 - 会话 Tree 回溯抽屉：列出当前对话中可回溯的用户消息，可从任意更早的
   用户消息创建新的 pi 分支会话。
-
-### 优化
 - Header 缓存命中率改为与 pi CLI 公式完全对齐：
   `cacheRead / (cacheRead + input)`。
 - 缓存命中率 tooltip 明确将 `input` 标记为“非缓存输入”，与 pi 的会话

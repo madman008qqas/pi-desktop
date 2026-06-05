@@ -9,8 +9,6 @@ All notable changes to pi-desktop are documented here.
 ### Added
 - Session Tree drawer: list forkable user turns from the current conversation
   and create a new pi branch session from any earlier user message.
-
-### Improved
 - Header cache-hit indicator is now aligned with the pi CLI formula:
   `cacheRead / (cacheRead + input)`.
 - Cache-hit tooltip now explicitly labels `input` as non-cached input, matching
