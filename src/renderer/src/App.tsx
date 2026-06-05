@@ -1615,58 +1615,78 @@ function SessionStatus(props: {
 	duration?: number;
 }) {
 	if (!props.state) return null;
+
+	// ── Compute cache hit rate from raw data (same as pi CLI extension) ──
+	const s = props.state;
+	const hitTotal = (s.cacheRead ?? 0) + (s.tokensInput ?? 0);
+	const cacheHitRate =
+		hitTotal > 0 ? ((s.cacheRead ?? 0) / hitTotal) * 100 : undefined;
+
+	// ── Compute cost in RMB using DeepSeek per-token pricing ────────────
+	const pricing = detectDeepSeekPricing(s.modelId ?? "");
+	let costRmb: number | undefined;
+	if (pricing) {
+		costRmb = calcDeepSeekCost(
+			pricing,
+			s.tokensInput ?? 0,
+			s.tokensOutput ?? 0,
+			s.cacheRead ?? 0,
+		);
+	} else if (s.cost != null) {
+		costRmb = s.cost * 7.2;
+	}
+
 	return (
 		<div className="session-status">
 			{props.duration != null && (
 				<span title="本次会话耗时">⏱ {formatDuration(props.duration)}</span>
 			)}
-			{/* Cache hit rate — same format as pi CLI cache-hit-rate extension */}
-			{props.state.cacheHitRate != null && (
+			{/* Cache hit rate — same format as pi CLI extension */}
+			{cacheHitRate != null && (
 				<span
-					title={`缓存命中率: ${props.state.cacheHitRate.toFixed(1)}%`}
+					title={`缓存命中率: ${cacheHitRate.toFixed(1)}%`}
 					className={
-						props.state.cacheHitRate >= 80
+						cacheHitRate >= 80
 							? "stat-success"
-							: props.state.cacheHitRate >= 50
+							: cacheHitRate >= 50
 								? "stat-warning"
 								: "stat-error"
 					}
 				>
-					{props.state.cacheHitRate >= 99.5
+					{cacheHitRate >= 99.5
 						? "H99%"
-						: props.state.cacheHitRate < 0.5
+						: cacheHitRate < 0.5
 							? "<1%"
-							: `H${props.state.cacheHitRate.toFixed(0)}%`}
+							: `H${cacheHitRate.toFixed(0)}%`}
 				</span>
 			)}
-			{/* Fallback: show raw cache tokens when no hit rate yet */}
-			{props.state.cacheHitRate == null && props.state.cacheTotal != null && props.state.cacheTotal > 0 && (
-				<span title={`读缓存: ${formatCompact(props.state.cacheRead ?? 0)} / 写缓存: ${formatCompact(props.state.cacheWrite ?? 0)}`}>
-					cache: ↑{formatCompact(props.state.cacheRead ?? 0)} / ↓{formatCompact(props.state.cacheWrite ?? 0)}
+			{/* Fallback raw cache when no hit rate yet */}
+			{cacheHitRate == null && (s.cacheRead ?? 0) + (s.cacheWrite ?? 0) > 0 && (
+				<span title={`读缓存: ${formatCompact(s.cacheRead ?? 0)} / 写缓存: ${formatCompact(s.cacheWrite ?? 0)}`}>
+					cache: ↑{formatCompact(s.cacheRead ?? 0)} / ↓{formatCompact(s.cacheWrite ?? 0)}
 				</span>
 			)}
-			{/* Cost in RMB — same format as pi CLI extension */}
-			{props.state.costRmb != null && (
+			{/* Cost in RMB */}
+			{costRmb != null && (
+				<span title={`累计费用: ¥${costRmb.toFixed(4)}`}>
+					{costRmb < 0.01
+						? `¥${costRmb.toFixed(4)}`
+						: costRmb < 1
+							? `¥${costRmb.toFixed(3)}`
+							: `¥${costRmb.toFixed(2)}`}
+				</span>
+			)}
+			{/* Fallback USD when no RMB */}
+			{costRmb == null && s.cost != null && (
+				<span title="累计费用（USD）">${s.cost.toFixed(3)}</span>
+			)}
+			{/* Context */}
+			{s.contextPercent != null && (
 				<span
-					title={`累计费用: ¥${props.state.costRmb.toFixed(4)}`}
+					title={`上下文: ${formatTokens(s.contextTokens ?? 0)} / ${formatCompact(s.contextWindow)}  (${s.contextPercent.toFixed(1)}%)`}
 				>
-					{props.state.costRmb < 0.01
-						? `¥${props.state.costRmb.toFixed(4)}`
-						: props.state.costRmb < 1
-							? `¥${props.state.costRmb.toFixed(3)}`
-							: `¥${props.state.costRmb.toFixed(2)}`}
-				</span>
-			)}
-			{/* Fallback: show raw USD cost when costRmb not available */}
-			{props.state.costRmb == null && props.state.cost != null && (
-				<span title="本次会话累计费用（USD）">${props.state.cost.toFixed(3)}</span>
-			)}
-			{props.state.contextPercent != null && (
-				<span
-					title={`上下文: ${formatTokens(props.state.contextTokens ?? 0)} / ${formatCompact(props.state.contextWindow)}  (${props.state.contextPercent.toFixed(1)}%)`}
-				>
-					{formatTokens(props.state.contextTokens ?? 0)}/{formatCompact(props.state.contextWindow)}（{props.state.contextPercent?.toFixed?.(1) ??
-						props.state.contextPercent}%）
+					{formatTokens(s.contextTokens ?? 0)}/{formatCompact(s.contextWindow)}（{s.contextPercent?.toFixed?.(1) ??
+						s.contextPercent}%）
 				</span>
 			)}
 		</div>
@@ -1764,6 +1784,48 @@ function formatTokens(count: number): string {
 	if (count < 1000000) return `${Math.round(count / 1000)}k`;
 	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
 	return `${Math.round(count / 1000000)}M`;
+}
+
+// ── DeepSeek pricing (元/百万tokens, from official page) ────────────
+const DEEPSEEK_PRICING: Record<
+	string,
+	{ miss: number; hit: number; output: number }
+> = {
+	"deepseek-v4-flash": { miss: 1.0, hit: 0.02, output: 2.0 },
+	"deepseek-v4-pro": { miss: 3.0, hit: 0.025, output: 6.0 },
+};
+
+function detectDeepSeekPricing(
+	modelId: string,
+): { miss: number; hit: number; output: number } | null {
+	const m = DEEPSEEK_PRICING[modelId];
+	if (m) return m;
+	if (
+		modelId.includes("deepseek-v4-flash") ||
+		modelId.includes("deepseek-chat")
+	) {
+		return DEEPSEEK_PRICING["deepseek-v4-flash"];
+	}
+	if (
+		modelId.includes("deepseek-v4-pro") ||
+		modelId.includes("deepseek-reasoner")
+	) {
+		return DEEPSEEK_PRICING["deepseek-v4-pro"];
+	}
+	return null;
+}
+
+function calcDeepSeekCost(
+	pricing: { miss: number; hit: number; output: number },
+	input: number,
+	output: number,
+	cacheRead: number,
+): number {
+	const nonCached = Math.max(0, input - cacheRead);
+	const inputCost =
+		(nonCached * pricing.miss + cacheRead * pricing.hit) / 1_000_000;
+	const outputCost = (output * pricing.output) / 1_000_000;
+	return inputCost + outputCost;
 }
 
 function BranchSelector(props: {
