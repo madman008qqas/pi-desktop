@@ -1633,7 +1633,18 @@ function SessionStatus(props: {
 				</span>
 			)}
 			{props.state.cacheTotal != null && (
-				<span>cache: {formatCompact(props.state.cacheTotal)}</span>
+				<span title={`读缓存: ${formatCompact(props.state.cacheRead ?? 0)} / 写缓存: ${formatCompact(props.state.cacheWrite ?? 0)}`}>
+					cache: ↑{formatCompact(props.state.cacheRead ?? 0)} /
+					↓{formatCompact(props.state.cacheWrite ?? 0)}
+					{props.state.cacheTotal > 0 && (
+						<> ({(props.state.cacheRead! / props.state.cacheTotal * 100).toFixed(1)}% hit)</>
+					)}
+				</span>
+			)}
+			{props.state.cost != null && (
+				<span title="本次会话累计费用">
+					cost: {props.state.cost < 0.001 ? `$${props.state.cost.toFixed(6)}` : `$${props.state.cost.toFixed(4)}`}
+				</span>
 			)}
 		</div>
 	);

@@ -192,7 +192,10 @@ export function createPreviewApi(): PiDesktopApi {
 				contextPercent: 5,
 				contextTokens: 5000,
 				contextWindow: 100000,
+				cacheRead: 11000000,
+				cacheWrite: 42000000,
 				cacheTotal: 53000000,
+				cost: 0.0421,
 			}),
 			runtimeState: async () => ({
 				modelName: "Preview GPT",
@@ -202,7 +205,10 @@ export function createPreviewApi(): PiDesktopApi {
 				contextPercent: 12,
 				contextTokens: 12000,
 				contextWindow: 100000,
+				cacheRead: 11000000,
+				cacheWrite: 42000000,
 				cacheTotal: 53000000,
+				cost: 0.0421,
 			}),
 			cycleModel: async () => ({
 				modelName: "Preview GPT",
