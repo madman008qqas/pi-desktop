@@ -4,6 +4,14 @@
 
 **A desktop workbench for managing multiple [pi](https://pi.dev) coding-agent sessions across project folders.**
 
+> This project is forked from [ayuayue/pi-desktop](https://github.com/ayuayue/pi-desktop).
+> It retains the upstream LICENSE, attribution, repository link, and commit history.
+>
+> Major changes:
+> - Added desktop support for pi session tree forking from earlier user turns.
+> - Added session cache-hit visibility in the header, aligned with pi CLI semantics.
+> - Continued release, README, and distribution updates on the forked repository.
+
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
@@ -125,7 +133,7 @@ pi --mode rpc
 
 Prebuilt packages for **Windows**, **macOS**, and **Linux** are published from tagged releases:
 
-👉 **[GitHub Releases](https://github.com/ayuayue/pi-desktop/releases)**
+👉 **[GitHub Releases](https://github.com/madman008qqas/pi-desktop/releases)**
 
 > pi-desktop requires the `pi` CLI to be installed separately and available in your system `PATH`.
 

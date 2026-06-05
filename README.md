@@ -4,6 +4,14 @@
 
 **一个用于管理多个 [pi](https://pi.dev) 编码 Agent 会话的桌面工作台。**
 
+> This project is forked from [ayuayue/pi-desktop](https://github.com/ayuayue/pi-desktop).
+> It retains the upstream LICENSE, attribution, repository link, and commit history.
+>
+> Major changes:
+> - Added desktop support for pi session tree forking from earlier user turns.
+> - Added session cache-hit visibility in the header, aligned with pi CLI semantics.
+> - Continued release, README, and distribution updates on the forked repository.
+
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
@@ -125,7 +133,7 @@ pi --mode rpc
 
 **Windows**、**macOS**、**Linux** 平台的预构建安装包在 GitHub Release 中发布：
 
-👉 **[GitHub Releases](https://github.com/ayuayue/pi-desktop/releases)**
+👉 **[GitHub Releases](https://github.com/madman008qqas/pi-desktop/releases)**
 
 > pi-desktop 需要单独安装 `pi` CLI 并确保其加入系统 `PATH`。
 
