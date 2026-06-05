@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.4.0-green)
+![Version](https://img.shields.io/badge/version-0.4.5-green)
 
 `pi-desktop` **不是** pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，将项目管理、会话管理、对话界面、配置管理和工具编排整合到一个原生桌面应用中——所有 Agent 能力由 pi 原生提供。
 
@@ -16,7 +16,11 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.4.0**（2026-06-02）
+> **最新版本 v0.4.5**（2026-06-05）
+
+### v0.4.5 新增
+- 🌳 Tree 回溯抽屉：从当前会话中选择任意更早的用户消息，创建新的 pi 分支会话
+- 🎯 Header 缓存命中率与 pi CLI 口径对齐，tooltip 明确显示“非缓存输入”
 
 ### v0.4.0 新增
 - 🖼️ 图片支持：从剪贴板粘贴图片（Ctrl+V）或拖拽图片到聊天输入框

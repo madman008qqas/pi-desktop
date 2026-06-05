@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.4.0-green)
+![Version](https://img.shields.io/badge/version-0.4.5-green)
 
 `pi-desktop` is **not** a fork of pi. It is a lightweight Electron shell that orchestrates multiple `pi --mode rpc` processes, providing a native desktop UI for projects, sessions, conversations, configuration, and tool orchestration — all powered by pi's native agent capabilities.
 
@@ -16,7 +16,11 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.4.0** (2026-06-02)
+> **Latest: v0.4.5** (2026-06-05)
+
+### v0.4.5 Added
+- 🌳 Tree drawer session forking: branch the current conversation from any earlier user turn
+- 🎯 Header cache-hit indicator now matches the pi CLI formula, with non-cached input clarified in the tooltip
 
 ### v0.4.0 Added
 - 🖼️ Image support: paste images from clipboard (Ctrl+V) or drag and drop into chat composer
