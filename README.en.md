@@ -36,7 +36,7 @@
 | **Multi-Project Workspace** | Add, search, and switch between local project folders. Run multiple pi agents simultaneously with per-project isolation. |
 | **Configuration Management** | Visual editors for pi's `models.json`, `auth.json`, and `settings.json` — manage providers, API keys, and model settings without touching JSON files manually. |
 | **Slash Commands & `!` Shell** | Built-in slash command suggestions (`/reload`, `/compact`, `/session`, …) and `!command` / `!!command` for inline shell execution directly in the chat composer. |
-| **Session Management** | Create new sessions, restore historical ones, rename sessions inline, export to HTML, and close agents — all from the sidebar or context menu. |
+| **Session Management** | Create new sessions, restore historical ones, fork from earlier user turns via the Tree drawer, rename sessions inline, export to HTML, and close agents — all from the sidebar or context menu. |
 | **Git Integration** | Real-time branch display with local + remote branch selector, branch count badge, and switching support. |
 | **Tool Call Visualization** | Grouped tool-call cards with summary and expandable details, clear status indicators for running/completed/failed calls. |
 | **Context-Aware Input** | `@` file suggestions from project tree, `!` shell execution, `/` slash commands — all from a single composer. |
@@ -50,7 +50,7 @@
 
 ![Workspace overview](docs/images/overview.png)
 
-Markdown rendering with streaming text, tool-call details, model/thinking/context/cache status bar, git branch selector, and action controls (New Session · Stop · Reload · Restart).
+Markdown rendering with streaming text, tool-call details, model/thinking/context/cache-hit status bar aligned with pi CLI, git branch selector, and action controls (New Session · Stop · Reload · Restart).
 
 ### Configuration Management
 
@@ -62,7 +62,7 @@ Visual editors for Models (provider cards + model grid), Auth (API key managemen
 
 ![Slash commands and session history](docs/images/slash-commands.png)
 
-Built-in slash command suggestions panel with descriptions, alongside the session history drawer for browsing and restoring past conversations.
+Built-in slash command suggestions panel with descriptions, alongside the session history drawer for browsing/restoring past conversations and the Tree drawer for forking from earlier user messages.
 
 ### File Tree & Session Actions
 
