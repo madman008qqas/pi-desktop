@@ -9,6 +9,7 @@ import type {
 	ImageContent,
 	Project,
 	SendPromptInput,
+	SessionForkMessage,
 	ThinkingUpdate,
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
@@ -341,6 +342,51 @@ export class AgentManager {
 		return this.getRuntimeState(agentId);
 	}
 
+	async getForkMessages(agentId: string): Promise<SessionForkMessage[]> {
+		const runtime = this.requireRuntime(agentId);
+		const response = await runtime.process.client.request({
+			type: "get_fork_messages",
+		});
+		const rawMessages =
+			(response.data as { messages?: unknown[] } | undefined)?.messages ?? [];
+		return rawMessages
+			.map((item) => {
+				const message = item as { entryId?: unknown; text?: unknown };
+				return {
+					entryId: String(message.entryId ?? ""),
+					text: String(message.text ?? ""),
+				};
+			})
+			.filter((message) => message.entryId && message.text.trim());
+	}
+
+	async fork(agentId: string, entryId: string) {
+		const runtime = this.requireRuntime(agentId);
+		const response = await runtime.process.client.request(
+			{ type: "fork", entryId },
+			120_000,
+		);
+		const data = response.data as { cancelled?: boolean; text?: string } | undefined;
+		if (data?.cancelled) return { cancelled: true, text: data.text };
+
+		const stateResponse = await runtime.process.client.request({
+			type: "get_state",
+		});
+		const stateData = stateResponse.data as
+			| { sessionId?: string; sessionFile?: string; sessionName?: string }
+			| undefined;
+		runtime.tab.sessionId = stateData?.sessionId ?? runtime.tab.sessionId;
+		runtime.tab.sessionPath = stateData?.sessionFile ?? runtime.tab.sessionPath;
+		if (stateData?.sessionName) runtime.tab.title = stateData.sessionName;
+		runtime.tab.status = "idle";
+
+		await this.loadMessages(agentId).catch(() => undefined);
+		const state = await this.getRuntimeState(agentId);
+		this.emit(ipcChannels.agentsRuntimeState, { agentId, state });
+		this.emitState();
+		return { cancelled: false, text: data?.text, state };
+	}
+
 	// ── DeepSeek pricing (元/百万tokens, from official page) ────────────
 	private static readonly DEEPSEEK_PRICING: Record<
 		string,
@@ -385,9 +431,12 @@ export class AgentManager {
 
 	async getRuntimeState(agentId: string): Promise<AgentRuntimeState> {
 		const runtime = this.requireRuntime(agentId);
-		const [stateResponse, statsResponse] = await Promise.all([
+		const [stateResponse, messagesResponse, statsResponse] = await Promise.all([
 			runtime.process.client
 				.request({ type: "get_state" })
+				.catch(() => ({ data: undefined })),
+			runtime.process.client
+				.request({ type: "get_messages" })
 				.catch(() => ({ data: undefined })),
 			runtime.process.client
 				.request({ type: "get_session_stats" })
@@ -396,12 +445,28 @@ export class AgentManager {
 		const state = stateResponse.data as any;
 		const stats = statsResponse.data as any;
 		const model = state?.model;
-		const tokens = stats?.tokens;
-		const input = tokens?.input ?? 0;
-		const output = tokens?.output ?? 0;
-		const cacheRead = tokens?.cacheRead ?? 0;
 
-		// ── Cache hit rate: cacheRead / (cacheRead + input) ──────────
+		// Compute token totals from messages (same data source as pi CLI cache-hit-rate extension)
+		const rawMessages: any[] =
+			((messagesResponse.data as { messages?: any[] } | undefined)?.messages ??
+				[]);
+		let input = 0;
+		let output = 0;
+		let cacheRead = 0;
+		let cacheWrite = 0;
+		let totalCostUsd = 0;
+		for (const msg of rawMessages) {
+			if (msg.role === "assistant" && msg.usage) {
+				input += msg.usage.input ?? 0;
+				output += msg.usage.output ?? 0;
+				cacheRead += msg.usage.cacheRead ?? 0;
+				cacheWrite += msg.usage.cacheWrite ?? 0;
+				totalCostUsd += msg.usage.cost?.total ?? 0;
+			}
+		}
+
+		// Keep this aligned with the pi CLI footer extension: usage.input is
+		// non-cached input, so the denominator must include cache reads.
 		let cacheHitRate: number | undefined;
 		const hitTotal = cacheRead + input;
 		if (hitTotal > 0) {
@@ -410,7 +475,6 @@ export class AgentManager {
 
 		// ── Cost in RMB (¥) ─────────────────────────────────────────
 		let costRmb: number | undefined;
-		let costUsd = stats?.cost;
 		const modelId = model?.id ?? "";
 		const dsPricing = AgentManager.detectDeepSeekPricing(modelId);
 		if (dsPricing) {
@@ -420,9 +484,8 @@ export class AgentManager {
 				output,
 				cacheRead,
 			);
-		} else if (costUsd != null) {
-			// Non-DeepSeek: convert USD → RMB at ~7.2
-			costRmb = costUsd * 7.2;
+		} else if (totalCostUsd > 0) {
+			costRmb = totalCostUsd * 7.2;
 		}
 
 		return {
@@ -439,9 +502,9 @@ export class AgentManager {
 			tokensInput: input,
 			tokensOutput: output,
 			cacheRead,
-			cacheWrite: tokens?.cacheWrite ?? 0,
-			cacheTotal: cacheRead + (tokens?.cacheWrite ?? 0),
-			cost: stats?.cost,
+			cacheWrite,
+			cacheTotal: cacheRead + cacheWrite,
+			cost: totalCostUsd > 0 ? totalCostUsd : undefined,
 			cacheHitRate,
 			costRmb,
 		};
@@ -659,19 +722,19 @@ export class AgentManager {
 				typed.result,
 				typed.isError,
 			);
-			this.addMessage(
-				agentId,
-				"tool",
-				`✓ ${typed.toolName || "tool"}${typed.isError ? " failed" : " done"}`,
-				{
-					status: typed.isError ? "error" : "done",
-					toolName: typed.toolName,
-					args: typed.args,
-					result: typed.result,
-					isError: typed.isError,
-					detailText,
-				},
-			);
+				this.addMessage(
+					agentId,
+					"tool",
+					`✓ ${typed.toolName || "tool"}${typed.isError ? " failed" : " done"}`,
+					{
+						status: typed.isError ? "error" : "done",
+						toolName: typed.toolName,
+						args: typed.args,
+						result: typed.result,
+						isError: typed.isError,
+						detailText,
+					},
+				);
 			// 工具调用完成后保持 agent 状态为 running，等待后续的 agent_end 事件
 			// 这样在工具完成到 agent 生成回复之间，thinking bubble 仍然会显示
 			if (runtime) {
@@ -753,14 +816,14 @@ export class AgentManager {
 							id: `${agentId}-history-${index}`,
 							agentId,
 							role: "user" as const,
-							text:
-								this.extractText(typed.content) ||
-								(images.length > 0 ? "[图片]" : ""),
-							timestamp: typed.timestamp ?? Date.now(),
-							...(images.length > 0 ? { images } : {}),
-						},
-					];
-				}
+								text:
+									this.extractText(typed.content) ||
+									(images.length > 0 ? "[图片]" : ""),
+								timestamp: typed.timestamp ?? Date.now(),
+								...(images.length > 0 ? { images } : {}),
+							},
+						];
+					}
 				if (typed.role === "assistant") {
 					const thinking = this.extractThinking(typed.content);
 					return [
@@ -768,12 +831,12 @@ export class AgentManager {
 							id: `${agentId}-history-${index}`,
 							agentId,
 							role: "assistant" as const,
-							text: this.extractText(typed.content),
-							timestamp: typed.timestamp ?? Date.now(),
-							...(thinking ? { thinking } : {}),
-						},
-					];
-				}
+								text: this.extractText(typed.content),
+								timestamp: typed.timestamp ?? Date.now(),
+								...(thinking ? { thinking } : {}),
+							},
+						];
+					}
 				if (typed.role === "toolResult")
 					return [
 						{

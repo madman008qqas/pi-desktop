@@ -14,6 +14,7 @@ import type {
 	PiInstallStatus,
 	Project,
 	SendPromptInput,
+	SessionForkMessage,
 	SessionSummary,
 	ThinkingUpdate,
 } from "../shared/types";
@@ -151,6 +152,17 @@ const api = {
 				ipcChannels.agentsCompact,
 				agentId,
 			) as Promise<AgentRuntimeState>,
+		forkMessages: (agentId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsForkMessages,
+				agentId,
+			) as Promise<SessionForkMessage[]>,
+		fork: (agentId: string, entryId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsFork,
+				agentId,
+				entryId,
+			) as Promise<{ cancelled: boolean; text?: string; state?: AgentRuntimeState }>,
 		runtimeState: (agentId: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.agentsRuntimeState,

@@ -217,6 +217,14 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.agentsCompact, (_event, agentId: string) =>
 		agentManager.compact(agentId),
 	);
+	ipcMain.handle(ipcChannels.agentsForkMessages, (_event, agentId: string) =>
+		agentManager.getForkMessages(agentId),
+	);
+	ipcMain.handle(
+		ipcChannels.agentsFork,
+		(_event, agentId: string, entryId: string) =>
+			agentManager.fork(agentId, entryId),
+	);
 	ipcMain.handle(ipcChannels.agentsRuntimeState, (_event, agentId: string) =>
 		agentManager.getRuntimeState(agentId),
 	);

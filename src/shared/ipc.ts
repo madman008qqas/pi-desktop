@@ -25,6 +25,8 @@ export const ipcChannels = {
 	agentsReload: "agents:reload",
 	agentsRestart: "agents:restart",
 	agentsCompact: "agents:compact",
+	agentsForkMessages: "agents:fork-messages",
+	agentsFork: "agents:fork",
 	agentsRuntimeState: "agents:runtime-state",
 	agentsCycleModel: "agents:cycle-model",
 	agentsAvailableModels: "agents:available-models",

@@ -57,6 +57,11 @@ export type PiCommand = {
 	source?: string;
 };
 
+export type SessionForkMessage = {
+	entryId: string;
+	text: string;
+};
+
 export type AgentRuntimeState = {
 	modelName?: string;
 	provider?: string;

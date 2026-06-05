@@ -37,11 +37,12 @@ import type {
 	PiCommand,
 	PiInstallStatus,
 	Project,
+	SessionForkMessage,
 	SessionSummary,
 	ThinkingUpdate,
 } from "../../shared/types";
 
-type DrawerPanel = "files" | "sessions";
+type DrawerPanel = "files" | "sessions" | "tree";
 
 const api = window.piDesktop ?? createPreviewApi();
 
@@ -117,6 +118,9 @@ export function App() {
 	const [toast, setToast] = useState<string | null>(null);
 	const [compacting, setCompacting] = useState(false);
 	const [drawer, setDrawer] = useState<DrawerPanel | null>(null);
+	const [forkMessages, setForkMessages] = useState<SessionForkMessage[]>([]);
+	const [forkMessagesLoading, setForkMessagesLoading] = useState(false);
+	const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [configOpen, setConfigOpen] = useState(false);
 	const [_debugOpen, _setDebugOpen] = useState(false);
@@ -399,6 +403,11 @@ export function App() {
 		void refreshSessions(activeProjectId);
 	}, [activeProjectId, agents.length]);
 
+	useEffect(() => {
+		setForkMessages([]);
+		setForkingEntryId(null);
+	}, [activeAgentId]);
+
 	async function checkPiInstall(source: "startup" | "manual" = "manual") {
 		setSettingsOpen(false);
 		setPiChecking(true);
@@ -468,6 +477,51 @@ export function App() {
 		const state = await api.agents.runtimeState(agentId).catch(() => undefined);
 		if (state)
 			setRuntimeStateByAgent((current) => ({ ...current, [agentId]: state }));
+	}
+
+	async function refreshForkMessages(agentId = activeAgentId) {
+		if (!agentId) {
+			setForkMessages([]);
+			return;
+		}
+		setForkMessagesLoading(true);
+		try {
+			const next = await api.agents.forkMessages(agentId);
+			setForkMessages(next);
+		} catch (error) {
+			setForkMessages([]);
+			setToast(error instanceof Error ? error.message : String(error));
+		} finally {
+			setForkMessagesLoading(false);
+		}
+	}
+
+	async function forkFromMessage(message: SessionForkMessage) {
+		if (!activeAgentId) return;
+		setForkingEntryId(message.entryId);
+		try {
+			const result = await api.agents.fork(activeAgentId, message.entryId);
+			if (result.cancelled) {
+				setToast("已取消回溯");
+				return;
+			}
+			if (result.state) {
+				setRuntimeStateByAgent((current) => ({
+					...current,
+					[activeAgentId]: result.state!,
+				}));
+			}
+			setPrompt(result.text || message.text);
+			setAttachedImages([]);
+			await refreshSessions();
+			await refreshForkMessages(activeAgentId);
+			const preview = message.text.trim().slice(0, 32);
+			setToast(preview ? `已回溯到：${preview}` : "已创建回溯分支");
+		} catch (error) {
+			setToast(error instanceof Error ? error.message : String(error));
+		} finally {
+			setForkingEntryId(null);
+		}
 	}
 
 	async function cycleModel() {
@@ -832,6 +886,9 @@ export function App() {
 	}
 
 	function openDrawer(panel: DrawerPanel) {
+		if (panel === "tree" && activeAgentId && drawer !== "tree") {
+			void refreshForkMessages(activeAgentId);
+		}
 		setDrawer((current) => (current === panel ? null : panel));
 	}
 
@@ -1186,6 +1243,21 @@ export function App() {
 								>
 									History
 								</button>
+								<button
+									className={drawer === "tree" ? "active" : ""}
+									disabled={
+										!activeAgentId ||
+										activeAgent?.status === "starting" ||
+										activeAgent?.status === "running"
+									}
+									title="回溯到某条用户消息之前，并创建新的 pi 分支会话"
+									onClick={() => {
+										setDrawerCollapsed(false);
+										openDrawer("tree");
+									}}
+								>
+									Tree
+								</button>
 							</div>
 						</>
 					</div>
@@ -1401,6 +1473,14 @@ export function App() {
 						panel={drawer}
 						files={files}
 						sessions={sessions}
+						forkMessages={forkMessages}
+						forkMessagesLoading={forkMessagesLoading}
+						forkingEntryId={forkingEntryId}
+						canFork={Boolean(
+							activeAgentId &&
+								activeAgent?.status !== "starting" &&
+								activeAgent?.status !== "running",
+						)}
 						modifiedFiles={modifiedFiles}
 						expandedDirs={expandedDirs}
 						onToggleDirectory={toggleDirectory}
@@ -1418,6 +1498,8 @@ export function App() {
 							await api.sessions.rename(filePath, newName);
 							await refreshSessions();
 						}}
+						onRefreshForkMessages={() => refreshForkMessages()}
+						onForkFromMessage={forkFromMessage}
 					/>
 				</aside>
 			)}
@@ -1618,9 +1700,15 @@ function SessionStatus(props: {
 
 	// ── Compute cache hit rate from raw data (same as pi CLI extension) ──
 	const s = props.state;
-	const hitTotal = (s.cacheRead ?? 0) + (s.tokensInput ?? 0);
+	const nonCachedInput = s.tokensInput ?? 0;
+	const hitTotal = (s.cacheRead ?? 0) + nonCachedInput;
+	const rawCacheHitRate =
+		s.cacheHitRate ??
+		(hitTotal > 0 ? ((s.cacheRead ?? 0) / hitTotal) * 100 : undefined);
 	const cacheHitRate =
-		hitTotal > 0 ? ((s.cacheRead ?? 0) / hitTotal) * 100 : undefined;
+		rawCacheHitRate != null
+			? Math.max(0, Math.min(rawCacheHitRate, 100))
+			: undefined;
 
 	// ── Compute cost in RMB using DeepSeek per-token pricing ────────────
 	const pricing = detectDeepSeekPricing(s.modelId ?? "");
@@ -1644,7 +1732,7 @@ function SessionStatus(props: {
 			{/* Cache hit rate — same format as pi CLI extension */}
 			{cacheHitRate != null && (
 				<span
-					title={`命中率: ${cacheHitRate.toFixed(1)}% (缓存读取: ${(s.cacheRead ?? 0).toLocaleString()} tokens / 非缓存输入: ${(s.tokensInput ?? 0).toLocaleString()} tokens)`}
+					title={`命中率: ${cacheHitRate.toFixed(1)}% (缓存读取: ${(s.cacheRead ?? 0).toLocaleString()} tokens / 非缓存输入: ${nonCachedInput.toLocaleString()} tokens)`}
 					className={
 						cacheHitRate >= 80
 							? "stat-success"
@@ -2533,6 +2621,10 @@ function DrawerContent(props: {
 	panel: DrawerPanel;
 	files: FileTreeNode[];
 	sessions: SessionSummary[];
+	forkMessages: SessionForkMessage[];
+	forkMessagesLoading: boolean;
+	forkingEntryId: string | null;
+	canFork: boolean;
 	modifiedFiles: { path: string; toolName: string; status: string }[];
 	expandedDirs: Set<string>;
 	onToggleDirectory: (path: string) => void;
@@ -2541,8 +2633,15 @@ function DrawerContent(props: {
 	onRefreshSessions: () => void;
 	onOpenSession: (session: SessionSummary) => void;
 	onRenameSession: (filePath: string, newName: string) => void;
+	onRefreshForkMessages: () => void;
+	onForkFromMessage: (message: SessionForkMessage) => void;
 }) {
-	const title = props.panel === "files" ? "文件" : "历史会话";
+	const title =
+		props.panel === "files"
+			? "文件"
+			: props.panel === "sessions"
+				? "历史会话"
+				: "会话回溯";
 	return (
 		<>
 			<div className="drawer-header">
@@ -2564,6 +2663,16 @@ function DrawerContent(props: {
 					onRefresh={props.onRefreshSessions}
 					onOpen={props.onOpenSession}
 					onRename={props.onRenameSession}
+				/>
+			)}
+			{props.panel === "tree" && (
+				<TreePanel
+					messages={props.forkMessages}
+					loading={props.forkMessagesLoading}
+					forkingEntryId={props.forkingEntryId}
+					canFork={props.canFork}
+					onRefresh={props.onRefreshForkMessages}
+					onFork={props.onForkFromMessage}
 				/>
 			)}
 		</>
@@ -2745,6 +2854,55 @@ function SessionsPanel(props: {
 					)}
 				</div>
 			))}
+		</div>
+	);
+}
+
+function TreePanel(props: {
+	messages: SessionForkMessage[];
+	loading: boolean;
+	forkingEntryId: string | null;
+	canFork: boolean;
+	onRefresh: () => void;
+	onFork: (message: SessionForkMessage) => void;
+}) {
+	return (
+		<div className="tree-panel">
+			<div className="panel-action-row">
+				<span>{props.messages.length} fork points</span>
+				<button onClick={props.onRefresh} disabled={props.loading}>
+					{props.loading ? "刷新中…" : "刷新"}
+				</button>
+			</div>
+			<p className="tree-panel-hint">
+				选择一条用户消息，pi 会回溯到它之前并创建新的分支会话。
+			</p>
+			{!props.canFork && (
+				<div className="empty-state">
+					当前 agent 正在启动或运行，结束后才能回溯。
+				</div>
+			)}
+			{props.canFork && !props.loading && props.messages.length === 0 && (
+				<div className="empty-state">当前会话还没有可回溯的用户消息。</div>
+			)}
+			{props.messages.map((message, index) => {
+				const isForking = props.forkingEntryId === message.entryId;
+				return (
+					<div className="fork-message-card" key={message.entryId}>
+						<div className="fork-message-meta">
+							<span>#{index + 1}</span>
+							<code>{message.entryId.slice(0, 8)}</code>
+						</div>
+						<p>{message.text}</p>
+						<button
+							disabled={!props.canFork || Boolean(props.forkingEntryId)}
+							onClick={() => props.onFork(message)}
+						>
+							{isForking ? "回溯中…" : "回溯到这里"}
+						</button>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
