@@ -22,12 +22,10 @@
 - 🌳 Tree drawer session forking: branch the current conversation from any earlier user turn
 - 🎯 Header cache-hit indicator now matches the pi CLI formula, with non-cached input clarified in the tooltip
 
-### v0.4.0 Added
-- 🖼️ Image support: paste images from clipboard (Ctrl+V) or drag and drop into chat composer
-- 👁️ Image preview in user messages with click-to-zoom fullscreen viewer
-- 📜 History session image restoration: images from previous sessions now display correctly
-- 🔔 Session end notification: system notification when agent finishes responding
-- ⚡ Large image auto-compression: images resized to 2000px max edge
+### v0.4.4 Improved
+- ⌨️ Composer now supports Up/Down history navigation for a more CLI-like resend workflow
+- ✏️ User messages now include an edit button that copies the text back into the composer
+- 🧩 Models tab now provides API type presets while still allowing custom values for unknown types
 
 [View Full Changelog →](CHANGELOG.md)
 
